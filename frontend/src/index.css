@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+/* =========================================
+   React PDF Highlighter 核心修复样式
+   ========================================= */
+
+/* 1. 修复 "container must be absolutely positioned" 报错 */
+.pdfViewer {
+    position: absolute !important; /* 强制覆盖，确保生效 */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 2. 确保高亮层正确覆盖 */
+.PdfHighlighter {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+}
+
+/* 3. 修复高亮位置偏差 */
+.Highlight__part {
+    margin: -2px;
+    padding: 2px;
+}
+
+/* 4. 修复弹窗样式 */
+.Highlight__popup {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #333;
+    z-index: 100;
+    min-width: 120px;
+}

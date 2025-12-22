@@ -1,0 +1,22 @@
+# --- 依赖 ---
+node_modules/
+
+# --- 构建产物 (前端打包后的文件) ---
+dist/
+build/
+
+# --- 环境变量 (包含敏感信息，绝不能提交) ---
+.env
+.env.local
+.env.*.local
+
+# --- 日志文件 ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs
+*.log
+
+# --- 系统文件 ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文献管理系统</title>
+    <!-- Ant Design CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5.12.0/dist/reset.css">
+    <!-- 自定义CSS -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+        
+        #app {
+            min-height: 100vh;
+        }
+        
+        .auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+        }
+        
+        .auth-form {
+            width: 100%;
+            max-width: 400px;
+            padding: 24px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .auth-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 24px;
+        }
+        
+        .site-layout {
+            min-height: 100vh;
+        }
+        
+        .site-layout-background {
+            background: #fff;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            color: #fff;
+            margin: 16px;
+        }
+        
+        .content {
+            padding: 24px;
+            margin: 0;
+            min-height: 280px;
+            background: #fff;
+        }
+        
+        .search-bar {
+            margin-bottom: 24px;
+        }
+        
+        .table-action {
+            display: flex;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <!-- React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Day.js (Ant Design 依赖) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
+    <!-- Ant Design -->
+    <script crossorigin src="https://unpkg.com/antd@5.12.0/dist/antd.min.js"></script>
+    <!-- Ant Design Icons -->
+    <script crossorigin src="https://unpkg.com/@ant-design/icons@5.2.6/dist/index.umd.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Button, Form, Input, Layout, Menu, Table, Modal, message, Tabs, Card, Space, Select, InputNumber, Tag } = antd;
+        const { Header, Content, Sider } = Layout;
+        const { TabPane } = Tabs;
+        
+        // API服务
+        // 自动使用当前页面的 host，或者回退到 localhost:3000
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000/api' 
+            : '/api';
+        
+        const apiService = {
+            async request(endpoint, options = {}) {
+                const token = localStorage.getItem('token');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...options.headers,
+                };
+                
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                console.log(`Sending request to: ${API_BASE_URL}${endpoint}`, { options, headers });
+                
+                try {
+                    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                        ...options,
+                        headers,
+                    });
+                    
+                    const responseText = await response.text();
+                    console.log('Raw response:', responseText);
+
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (e) {
+                        console.error('Response parse error:', responseText);
+                        throw new Error('服务器响应格式错误: ' + responseText.substring(0, 100));
+                    }
+                    
+                    if (!response.ok) {
+                        throw new Error(data.message || '请求失败');
+                    }
+                    
+                    return data;
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    throw error;
+                }
+            },
+            
+            get(endpoint, options = {}) {
+                return this.request(endpoint, { ...options, method: 'GET' });
+            },
+            
+            post(endpoint, data, options = {}) {
+                return this.request(endpoint, { ...options, method: 'POST', body: JSON.stringify(data) });
+            },
+            
+            put(endpoint, data, options = {}) {
+                return this.request(endpoint, { ...options, method: 'PUT', body: JSON.stringify(data) });
+            },
+            
+            delete(endpoint, options = {}) {
+                return this.request(endpoint, { ...options, method: 'DELETE' });
+            }
+        };
+        
+        // 状态管理
+        const useAuth = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            
+            useEffect(() => {
+                // 检查本地存储中的token
+                const token = localStorage.getItem('token');
+                const userData = localStorage.getItem('user');
+                
+                if (token && userData) {
+                    setUser(JSON.parse(userData));
+                }
+                
+                setLoading(false);
+            }, []);
+            
+            const login = async (credentials) => {
+                try {
+                    const response = await apiService.post('/auth/login', credentials);
+                    localStorage.setItem('token', response.token);
+                    localStorage.setItem('user', JSON.stringify(response.user));
+                    setUser(response.user);
+                    message.success('登录成功');
+                    return true;
+                } catch (error) {
+                    message.error(error.message);
+                    return false;
+                }
+            };
+            
+            const register = async (userData) => {
+                try {
+                    const response = await apiService.post('/auth/register', userData);
+                    // 修改：注册成功后不自动登录，而是提示用户登录
+                    message.success('注册成功，请登录');
+                    return true;
+                } catch (error) {
+                    message.error(error.message);
+                    return false;
+                }
+            };
+            
+            const logout = () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setUser(null);
+                message.success('退出登录成功');
+            };
+            
+            return { user, loading, login, register, logout };
+        };
+        
+        // 登录注册页面
+        const AuthPage = ({ onLogin, onRegister }) => {
+            const [activeTab, setActiveTab] = useState('login');
+            const [loading, setLoading] = useState(false);
+            
+            // 登录表单
+            const [loginForm] = Form.useForm();
+            // 注册表单
+            const [registerForm] = Form.useForm();
+            
+            const handleLogin = async (values) => {
+                console.log('开始登录流程', values);
+                setLoading(true);
+                try {
+                    await onLogin(values);
+                } catch (error) {
+                    console.error('登录流程异常:', error);
+                    message.error('登录过程发生意外错误');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const handleRegister = async (values) => {
+                console.log('开始注册流程', values);
+                setLoading(true);
+                try {
+                    const success = await onRegister(values);
+                    
+                    if (success) {
+                        // 使用 setTimeout 确保状态更新在 loading 结束后执行
+                        setTimeout(() => {
+                            // 注册成功，跳转到登录 Tab
+                            setActiveTab('login');
+                            // 自动填充登录表单的邮箱
+                            loginForm.setFieldsValue({ email: values.email });
+                            // 重置注册表单
+                            registerForm.resetFields();
+                        }, 100);
+                    }
+                } catch (error) {
+                    console.error('注册流程异常:', error);
+                    message.error('注册过程发生意外错误');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            return (
+                <div className="auth-container">
+                    <div className="auth-form">
+                        <h1 className="auth-title">文献管理系统</h1>
+                        <Tabs activeKey={activeTab} onChange={setActiveTab}>
+                            <TabPane tab="登录" key="login">
+                                <Form
+                                    form={loginForm}
+                                    onFinish={handleLogin}
+                                    layout="vertical"
+                                >
+                                    <Form.Item
+                                        name="email"
+                                        label="邮箱"
+                                        rules={[{ required: true, message: '请输入邮箱' }, { type: 'email', message: '请输入有效的邮箱地址' }]}
+                                    >
+                                        <Input placeholder="请输入邮箱" />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="password"
+                                        label="密码"
+                                        rules={[{ required: true, message: '请输入密码' }, { min: 6, message: '密码长度不能少于6个字符' }]}
+                                    >
+                                        <Input.Password placeholder="请输入密码" />
+                                    </Form.Item>
+                                    <Form.Item>
+                                        <Button type="primary" htmlType="submit" loading={loading} block>
+                                            登录
+                                        </Button>
+                                    </Form.Item>
+                                </Form>
+                            </TabPane>
+                            <TabPane tab="注册" key="register">
+                                <Form
+                                    form={registerForm}
+                                    onFinish={handleRegister}
+                                    layout="vertical"
+                                >
+                                    <Form.Item
+                                        name="username"
+                                        label="用户名"
+                                        rules={[{ required: true, message: '请输入用户名' }, { min: 3, message: '用户名长度不能少于3个字符' }]}
+                                    >
+                                        <Input placeholder="请输入用户名" />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="email"
+                                        label="邮箱"
+                                        rules={[{ required: true, message: '请输入邮箱' }, { type: 'email', message: '请输入有效的邮箱地址' }]}
+                                    >
+                                        <Input placeholder="请输入邮箱" />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="password"
+                                        label="密码"
+                                        rules={[{ required: true, message: '请输入密码' }, { min: 6, message: '密码长度不能少于6个字符' }]}
+                                    >
+                                        <Input.Password placeholder="请输入密码" />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="confirmPassword"
+                                        label="确认密码"
+                                        dependencies={['password']}
+                                        rules={[
+                                            { required: true, message: '请确认密码' },
+                                            ({ getFieldValue }) => ({
+                                                validator(_, value) {
+                                                    if (!value || getFieldValue('password') === value) {
+                                                        return Promise.resolve();
+                                                    }
+                                                    return Promise.reject(new Error('两次输入的密码不一致'));
+                                                },
+                                            }),
+                                        ]}
+                                    >
+                                        <Input.Password placeholder="请确认密码" />
+                                    </Form.Item>
+                                    <Form.Item>
+                                        <Button type="primary" htmlType="submit" loading={loading} block>
+                                            注册
+                                        </Button>
+                                    </Form.Item>
+                                </Form>
+                            </TabPane>
+                        </Tabs>
+                    </div>
+                </div>
+            );
+        };
+        
+        // 文献库页面
+        const LibraryPage = () => {
+            const [documents, setDocuments] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [searchText, setSearchText] = useState('');
+            const [isModalVisible, setIsModalVisible] = useState(false);
+            const [form] = Form.useForm();
+            
+            // 加载文献列表
+            const loadDocuments = async () => {
+                setLoading(true);
+                try {
+                    const response = await apiService.get('/documents');
+                    setDocuments(response);
+                } catch (error) {
+                    message.error('获取文献列表失败');
+                    // 加载失败时使用模拟数据
+                    const mockDocuments = [
+                        {
+                            _id: '1',
+                            title: '示例文献1',
+                            authors: ['作者1', '作者2'],
+                            journal: '示例期刊',
+                            year: 2023,
+                            doi: '10.1234/example.2023',
+                            status: '未读',
+                            tags: ['标签1', '标签2'],
+                            rating: 4
+                        },
+                        {
+                            _id: '2',
+                            title: '示例文献2',
+                            authors: ['作者3'],
+                            journal: '示例期刊',
+                            year: 2022,
+                            doi: '10.1234/example.2022',
+                            status: '已读',
+                            tags: ['标签2', '标签3'],
+                            rating: 5
+                        }
+                    ];
+                    setDocuments(mockDocuments);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            useEffect(() => {
+                loadDocuments();
+            }, []);
+            
+            // 显示添加文献模态框
+            const showModal = () => {
+                setIsModalVisible(true);
+            };
+            
+            // 关闭模态框
+            const handleCancel = () => {
+                setIsModalVisible(false);
+                form.resetFields();
+            };
+            
+            // 提交添加文献表单
+            const handleSubmit = async (values) => {
+                try {
+                    // 将作者和标签转换为数组
+                    const documentData = {
+                        ...values,
+                        authors: values.authors.split(',').map(author => author.trim()),
+                        tags: values.tags ? values.tags.split(',').map(tag => tag.trim()) : []
+                    };
+                    await apiService.post('/documents', documentData);
+                    message.success('文献添加成功');
+                    setIsModalVisible(false);
+                    form.resetFields();
+                    loadDocuments();
+                } catch (error) {
+                    message.error('添加文献失败');
+                }
+            };
+            
+            // 删除文献
+            const handleDelete = async (id) => {
+                Modal.confirm({
+                    title: '确认删除',
+                    content: '确定要删除这篇文献吗？',
+                    onOk: async () => {
+                        try {
+                            await apiService.delete(`/documents/${id}`);
+                            message.success('文献删除成功');
+                            loadDocuments();
+                        } catch (error) {
+                            message.error('删除文献失败');
+                        }
+                    }
+                });
+            };
+            
+            // 表格列配置
+            const columns = [
+                {
+                    title: '标题',
+                    dataIndex: 'title',
+                    key: 'title',
+                },
+                {
+                    title: '作者',
+                    dataIndex: 'authors',
+                    key: 'authors',
+                    render: (authors) => authors.join(', '),
+                },
+                {
+                    title: '期刊',
+                    dataIndex: 'journal',
+                    key: 'journal',
+                },
+                {
+                    title: '年份',
+                    dataIndex: 'year',
+                    key: 'year',
+                },
+                {
+                    title: '状态',
+                    dataIndex: 'status',
+                    key: 'status',
+                    render: (status) => {
+                        let color = '#d9d9d9';
+                        if (status === '已读') color = '#52c41a';
+                        if (status === '重点') color = '#ff4d4f';
+                        return <Tag color={color}>{status}</Tag>;
+                    },
+                },
+                {
+                    title: '评分',
+                    dataIndex: 'rating',
+                    key: 'rating',
+                    render: (rating) => '★'.repeat(rating) + '☆'.repeat(5 - rating),
+                },
+                {
+                    title: '标签',
+                    dataIndex: 'tags',
+                    key: 'tags',
+                    render: (tags) => (
+                        <Space>
+                            {tags.map((tag) => (
+                                <Tag key={tag}>{tag}</Tag>
+                            ))}
+                        </Space>
+                    ),
+                },
+                {
+                    title: '操作',
+                    key: 'action',
+                    render: (_, record) => (
+                        <div className="table-action">
+                            <Button type="primary" size="small">阅读</Button>
+                            <Button type="default" size="small">编辑</Button>
+                            <Button type="danger" size="small" onClick={() => handleDelete(record._id)}>删除</Button>
+                        </div>
+                    ),
+                },
+            ];
+            
+            return (
+                <div>
+                    <div className="search-bar">
+                        <Space>
+                            <Input.Search
+                                placeholder="搜索文献..."
+                                allowClear
+                                enterButton="搜索"
+                                size="large"
+                                onSearch={setSearchText}
+                                style={{ width: 300 }}
+                            />
+                            <Button type="primary" size="large" onClick={showModal}>
+                                添加文献
+                            </Button>
+                        </Space>
+                    </div>
+                    
+                    <Table
+                        columns={columns}
+                        dataSource={documents}
+                        rowKey="_id"
+                        loading={loading}
+                        pagination={{ pageSize: 10 }}
+                    />
+                    
+                    {/* 添加文献模态框 */}
+                    <Modal
+                        title="添加文献"
+                        open={isModalVisible}
+                        onCancel={handleCancel}
+                        footer={null}
+                    >
+                        <Form
+                            form={form}
+                            layout="vertical"
+                            onFinish={handleSubmit}
+                        >
+                            <Form.Item
+                                name="title"
+                                label="标题"
+                                rules={[{ required: true, message: '请输入文献标题' }]}
+                            >
+                                <Input placeholder="请输入文献标题" />
+                            </Form.Item>
+                            <Form.Item
+                                name="authors"
+                                label="作者"
+                                rules={[{ required: true, message: '请输入作者，多个作者用逗号分隔' }]}
+                            >
+                                <Input placeholder="请输入作者，多个作者用逗号分隔" />
+                            </Form.Item>
+                            <Form.Item
+                                name="journal"
+                                label="期刊"
+                            >
+                                <Input placeholder="请输入期刊名称" />
+                            </Form.Item>
+                            <Form.Item
+                                name="year"
+                                label="年份"
+                            >
+                                <InputNumber min={1800} max={new Date().getFullYear()} placeholder="请输入年份" />
+                            </Form.Item>
+                            <Form.Item
+                                name="doi"
+                                label="DOI"
+                            >
+                                <Input placeholder="请输入DOI" />
+                            </Form.Item>
+                            <Form.Item
+                                name="status"
+                                label="阅读状态"
+                                initialValue="未读"
+                            >
+                                <Select>
+                                    <Select.Option value="未读">未读</Select.Option>
+                                    <Select.Option value="已读">已读</Select.Option>
+                                    <Select.Option value="重点">重点</Select.Option>
+                                </Select>
+                            </Form.Item>
+                            <Form.Item
+                                name="rating"
+                                label="评分"
+                                initialValue={3}
+                            >
+                                <InputNumber min={1} max={5} />
+                            </Form.Item>
+                            <Form.Item
+                                name="tags"
+                                label="标签"
+                            >
+                                <Input placeholder="请输入标签，多个标签用逗号分隔" />
+                            </Form.Item>
+                            <Form.Item>
+                                <Space>
+                                    <Button onClick={handleCancel}>取消</Button>
+                                    <Button type="primary" htmlType="submit">添加</Button>
+                                </Space>
+                            </Form.Item>
+                        </Form>
+                    </Modal>
+                </div>
+            );
+        };
+        
+        // 阅读器页面
+        const ReaderPage = () => {
+            return (
+                <div>
+                    <h1>阅读器</h1>
+                    <p>PDF阅读器功能开发中...</p>
+                </div>
+            );
+        };
+        
+        // 引用管理页面
+        const CitationsPage = () => {
+            return (
+                <div>
+                    <h1>引用管理</h1>
+                    <p>引用管理功能开发中...</p>
+                </div>
+            );
+        };
+        
+        // 协作功能页面
+        const CollaborationPage = () => {
+            return (
+                <div>
+                    <h1>协作功能</h1>
+                    <p>协作功能开发中...</p>
+                </div>
+            );
+        };
+        
+        // 主应用组件
+        const App = () => {
+            const [collapsed, setCollapsed] = useState(false);
+            const { user, loading, login, register, logout } = useAuth();
+            const [currentPage, setCurrentPage] = useState('library');
+            
+            if (loading) {
+                return <div>加载中...</div>;
+            }
+            
+            // 如果用户未登录，显示登录页面
+            if (!user) {
+                return <AuthPage onLogin={login} onRegister={register} />;
+            }
+            
+            // 渲染当前页面
+            const renderCurrentPage = () => {
+                switch (currentPage) {
+                    case 'library':
+                        return <LibraryPage />;
+                    case 'reader':
+                        return <ReaderPage />;
+                    case 'citations':
+                        return <CitationsPage />;
+                    case 'collaboration':
+                        return <CollaborationPage />;
+                    default:
+                        return <LibraryPage />;
+                }
+            };
+            
+            return (
+                <Layout className="site-layout">
+                    <Header className="site-layout-background" style={{ padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="logo">文献管理系统</div>
+                        <Space style={{ marginRight: 24 }}>
+                            <span>欢迎, {user.username}</span>
+                            <Button type="primary" danger onClick={logout}>退出登录</Button>
+                        </Space>
+                    </Header>
+                    <Layout>
+                        <Sider
+                            collapsible
+                            collapsed={collapsed}
+                            onCollapse={setCollapsed}
+                            className="site-layout-background"
+                            width={200}
+                        >
+                            <Menu
+                                mode="inline"
+                                selectedKeys={[currentPage]}
+                                style={{ height: '100%', borderRight: 0 }}
+                                items={[
+                                    {
+                                        key: 'library',
+                                        label: '文献库',
+                                        onClick: () => setCurrentPage('library'),
+                                    },
+                                    {
+                                        key: 'reader',
+                                        label: '阅读器',
+                                        onClick: () => setCurrentPage('reader'),
+                                    },
+                                    {
+                                        key: 'citations',
+                                        label: '引用管理',
+                                        onClick: () => setCurrentPage('citations'),
+                                    },
+                                    {
+                                        key: 'collaboration',
+                                        label: '协作功能',
+                                        onClick: () => setCurrentPage('collaboration'),
+                                    },
+                                ]}
+                            />
+                        </Sider>
+                        <Layout style={{ padding: '0 24px 24px' }}>
+                            <Content
+                                className="site-layout-background"
+                                style={{ padding: 24, margin: 0, minHeight: 280 }}
+                            >
+                                {renderCurrentPage()}
+                            </Content>
+                        </Layout>
+                    </Layout>
+                </Layout>
+            );
+        };
+        
+        // 渲染应用
+        const root = ReactDOM.createRoot(document.getElementById('app'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

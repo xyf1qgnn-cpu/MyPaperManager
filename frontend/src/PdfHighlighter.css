@@ -1,0 +1,45 @@
+/* frontend/src/PdfHighlighter.css */
+
+.PdfHighlighter {
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
+
+.PdfHighlighter .textLayer {
+  opacity: 1; /* 确保文字层可见 */
+  mix-blend-mode: multiply;
+}
+
+.pdfViewer {
+  position: absolute; /* ⚠️ 这就是修复报错的关键样式 */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.Highlight__part {
+  margin: -2px;
+  padding: 2px;
+}
+
+.Highlight__popup {
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #333;
+  z-index: 100;
+  min-width: 120px;
+}
+
+/* 修复打印时的样式问题 */
+@media print {
+  .PdfHighlighter {
+    overflow: visible;
+  }
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>MERN Literature Manager</title>
+    <style>
+      .pdfViewer {
+        position: absolute !important;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .PdfHighlighter {
+        position: relative;
+        overflow: hidden;
+        height: 100%;
+        width: 100%;
+      }
+      /* 修复高亮错位 */
+      .Highlight__part {
+        margin: -2px;
+        padding: 2px;
+      }
+      /* 修复弹窗样式 */
+      .Highlight__popup {
+        background: white;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #333;
+        z-index: 100;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
