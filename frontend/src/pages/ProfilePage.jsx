@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Avatar, message, Upload } from 'antd';
-import { UserOutlined, UploadOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Avatar, message, Upload, Spin } from 'antd';
+import { UserOutlined, UploadOutlined, MailOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons';
+import { motion } from 'framer-motion';
 import { getProfile, updateProfile } from '../services/userService';
 import { uploadFile } from '../services/documentService';
 
@@ -38,25 +39,12 @@ const ProfilePage = () => {
   const handleAvatarUpload = async ({ file, onSuccess, onError }) => {
     setUploadingAvatar(true);
     try {
-      // 1. 上传图片
       const response = await uploadFile(file);
-      // response: { message, file: { path: 'uploads/xxx.png', ... } }
-      const avatarUrl = `/api/${response.file.path.replace(/\\/g, '/')}`; // 确保路径格式正确，并加上 /api 前缀 (如果后端返回相对路径)
-      // 注意：后端返回的 path 可能是 "public/uploads/xxx" 或 "uploads/xxx"
-      // 我们的静态文件服务是 /api/files/:filename 还是直接 /uploads ?
-      // 查看 server.js: app.use('/uploads', express.static(path.resolve(config.upload.path)));
-      // 所以访问路径应该是 /uploads/filename
-      // 而 uploadFile 返回的 path 是文件系统路径。
-      // 我们需要构建正确的 URL。
-      // 假设 response.file.filename 是文件名。
       const finalAvatarUrl = `/uploads/${response.file.filename}`;
-      
-      // 2. 更新用户 Profile
       await updateProfile({ avatar: finalAvatarUrl });
-      
       message.success('头像更新成功');
       onSuccess('ok');
-      fetchProfile(); // 刷新头像显示
+      fetchProfile();
     } catch (error) {
       console.error('Avatar upload failed:', error);
       message.error('头像上传失败');
@@ -69,14 +57,11 @@ const ProfilePage = () => {
   const onFinish = async (values) => {
     setSubmitting(true);
     try {
-      // 假设后端接口为 PUT /api/user/profile
-      // 如果没有 bio 字段，后端可能会忽略或报错，这里假设后端支持
       await updateProfile({
         username: values.username,
         bio: values.bio
       });
       message.success('个人信息更新成功');
-      // 刷新数据
       fetchProfile();
     } catch (error) {
       console.error('Update profile failed:', error);
@@ -86,28 +71,162 @@ const ProfilePage = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: 400 
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
-      <Card title="个人中心" variant="borderless" loading={loading}>
-        <div style={{ display: 'flex', marginBottom: 32, alignItems: 'center' }}>
-          <div style={{ marginRight: 32, textAlign: 'center' }}>
-            <Avatar size={100} icon={<UserOutlined />} src={profile?.avatar} />
-            <div style={{ marginTop: 16 }}>
-              <Upload 
-                customRequest={handleAvatarUpload} 
-                showUploadList={false} 
-                accept="image/*"
-              >
-                <Button icon={<UploadOutlined />} size="small" loading={uploadingAvatar}>更换头像</Button>
-              </Upload>
-            </div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <h2>{profile?.username}</h2>
-            <p style={{ color: '#666' }}>{profile?.email}</p>
+    <div style={{ maxWidth: 600, margin: '0 auto' }}>
+      {/* 页面标题 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          marginBottom: 32,
+        }}
+      >
+        <motion.div
+          animate={{
+            boxShadow: [
+              '0 0 10px rgba(0, 212, 255, 0.3)',
+              '0 0 20px rgba(0, 212, 255, 0.5)',
+              '0 0 10px rgba(0, 212, 255, 0.3)',
+            ],
+          }}
+          transition={{ duration: 2, repeat: Infinity }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <UserOutlined style={{ fontSize: 18, color: '#0a0f1a' }} />
+        </motion.div>
+        <h2 style={{ 
+          margin: 0, 
+          fontSize: 20, 
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+        }}>
+          个人中心
+        </h2>
+      </motion.div>
+
+      {/* 头像区域 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 24,
+          padding: 24,
+          background: 'rgba(0, 212, 255, 0.05)',
+          borderRadius: 16,
+          border: '1px solid rgba(0, 212, 255, 0.1)',
+          marginBottom: 32,
+        }}
+      >
+        <div style={{ position: 'relative' }}>
+          <motion.div
+            animate={{
+              boxShadow: [
+                '0 0 0 4px rgba(0, 212, 255, 0.2)',
+                '0 0 0 8px rgba(0, 212, 255, 0.1)',
+                '0 0 0 4px rgba(0, 212, 255, 0.2)',
+              ],
+            }}
+            transition={{ duration: 2, repeat: Infinity }}
+            style={{ borderRadius: '50%' }}
+          >
+            <Avatar 
+              size={100} 
+              icon={<UserOutlined />} 
+              src={profile?.avatar}
+              style={{
+                border: '3px solid rgba(0, 212, 255, 0.4)',
+              }}
+            />
+          </motion.div>
+          <Upload 
+            customRequest={handleAvatarUpload} 
+            showUploadList={false} 
+            accept="image/*"
+          >
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: '2px solid var(--bg-secondary)',
+              }}
+            >
+              {uploadingAvatar ? (
+                <Spin size="small" />
+              ) : (
+                <EditOutlined style={{ fontSize: 14, color: '#0a0f1a' }} />
+              )}
+            </motion.div>
+          </Upload>
+        </div>
+        
+        <div style={{ flex: 1 }}>
+          <h3 style={{ 
+            margin: 0, 
+            fontSize: 22, 
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            marginBottom: 4,
+          }}>
+            {profile?.username}
+          </h3>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6,
+            color: 'var(--text-tertiary)',
+            fontSize: 14,
+          }}>
+            <MailOutlined />
+            {profile?.email}
           </div>
         </div>
+      </motion.div>
 
+      {/* 表单区域 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
         <Form
           form={form}
           layout="vertical"
@@ -115,33 +234,70 @@ const ProfilePage = () => {
         >
           <Form.Item
             name="username"
-            label="昵称"
+            label={<span style={{ color: 'var(--text-primary)' }}>昵称</span>}
             rules={[{ required: true, message: '请输入昵称' }]}
           >
-            <Input />
+            <Input 
+              prefix={<UserOutlined style={{ color: 'var(--text-tertiary)' }} />}
+              style={{ 
+                height: 46, 
+                borderRadius: 10,
+                background: 'rgba(255, 255, 255, 0.03)',
+              }}
+            />
           </Form.Item>
 
           <Form.Item
             name="email"
-            label="邮箱"
+            label={<span style={{ color: 'var(--text-primary)' }}>邮箱</span>}
           >
-            <Input disabled />
+            <Input 
+              prefix={<MailOutlined style={{ color: 'var(--text-tertiary)' }} />}
+              disabled 
+              style={{ 
+                height: 46, 
+                borderRadius: 10,
+                background: 'rgba(255, 255, 255, 0.02)',
+              }}
+            />
           </Form.Item>
 
           <Form.Item
             name="bio"
-            label="个人简介"
+            label={<span style={{ color: 'var(--text-primary)' }}>个人简介</span>}
           >
-            <TextArea rows={4} placeholder="介绍一下你自己..." />
+            <TextArea 
+              rows={4} 
+              placeholder="介绍一下你自己..."
+              style={{ 
+                borderRadius: 10,
+                background: 'rgba(255, 255, 255, 0.03)',
+                resize: 'none',
+              }}
+            />
           </Form.Item>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={submitting}>
-              保存修改
-            </Button>
+          <Form.Item style={{ marginTop: 32 }}>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                loading={submitting}
+                icon={<SaveOutlined />}
+                style={{
+                  height: 46,
+                  borderRadius: 10,
+                  paddingLeft: 32,
+                  paddingRight: 32,
+                  fontWeight: 500,
+                }}
+              >
+                保存修改
+              </Button>
+            </motion.div>
           </Form.Item>
         </Form>
-      </Card>
+      </motion.div>
     </div>
   );
 };

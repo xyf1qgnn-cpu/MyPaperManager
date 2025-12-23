@@ -33,6 +33,7 @@ const documentRoutes = require('./routes/documentRoutes');
 const noteRoutes = require('./routes/noteRoutes');
 const annotationRoutes = require('./routes/annotationRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const collectionRoutes = require('./routes/collectionRoutes');
 
 // 确保uploads目录存在
 const fs = require('fs');
@@ -68,6 +69,9 @@ app.use('/api/annotations', annotationRoutes);
 
 // 使用AI路由
 app.use('/api/ai', aiRoutes);
+
+// 使用目录路由
+app.use('/api/collections', collectionRoutes);
 
 // 静态文件服务 - 提供前端页面和上传的文件
 app.use('/uploads', express.static(path.resolve(config.upload.path)));

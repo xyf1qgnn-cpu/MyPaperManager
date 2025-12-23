@@ -222,6 +222,234 @@ const toggleFavorite = async (req, res) => {
   }
 };
 
+// @desc    移动文档到目录
+// @route   PATCH /api/documents/:id/move
+// @access  Private
+const moveDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { collectionId } = req.body;
+    const userId = req.user._id;
+
+    // 验证目录存在（如果指定）
+    if (collectionId) {
+      const Collection = require('../models/Collection');
+      const collection = await Collection.findOne({
+        _id: collectionId,
+        owner: userId
+      });
+      if (!collection) {
+        return res.status(400).json({ message: '目标目录不存在' });
+      }
+    }
+
+    const document = await Document.findOneAndUpdate(
+      { _id: id, owner: userId },
+      { collectionId: collectionId || null, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    if (!document) {
+      return res.status(404).json({ message: '文献不存在' });
+    }
+
+    res.status(200).json(document);
+  } catch (error) {
+    console.error('移动文档失败:', error);
+    res.status(500).json({ message: '移动文档失败' });
+  }
+};
+
+// @desc    自动重命名文档
+// @route   PATCH /api/documents/:id/rename
+// @access  Private
+const renameDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { template } = req.body; // e.g., "[Year] [Author] - [Title]"
+    const userId = req.user._id;
+
+    const document = await Document.findOne({ _id: id, owner: userId });
+    if (!document) {
+      return res.status(404).json({ message: '文献不存在' });
+    }
+
+    // 构建新文件名
+    const filenameTemplate = template || document.filenameTemplate || '[Year] [Author] - [Title]';
+    
+    let newFilename = filenameTemplate
+      .replace('[Year]', document.year || 'Unknown')
+      .replace('[Author]', document.authors?.[0] || 'Unknown')
+      .replace('[Title]', document.title || 'Untitled')
+      .replace(/[<>:"/\\|?*]/g, '_') // 移除非法字符
+      .trim();
+
+    // 添加 .pdf 扩展名
+    if (!newFilename.toLowerCase().endsWith('.pdf')) {
+      newFilename += '.pdf';
+    }
+
+    // 如果有物理文件，进行重命名
+    const fs = require('fs');
+    const path = require('path');
+    const config = require('../config');
+
+    if (document.filename && document.pdfPath) {
+      const oldPath = path.join(config.upload.path, document.filename);
+      const newPath = path.join(config.upload.path, newFilename);
+
+      // 检查旧文件是否存在
+      if (fs.existsSync(oldPath)) {
+        // 检查新文件名是否已存在
+        if (fs.existsSync(newPath) && oldPath !== newPath) {
+          // 添加时间戳避免冲突
+          const timestamp = Date.now();
+          newFilename = newFilename.replace('.pdf', `_${timestamp}.pdf`);
+        }
+        
+        const finalNewPath = path.join(config.upload.path, newFilename);
+        fs.renameSync(oldPath, finalNewPath);
+      }
+    }
+
+    // 更新数据库
+    document.filename = newFilename;
+    document.originalFilename = newFilename;
+    document.pdfPath = `/uploads/${newFilename}`;
+    document.filenameTemplate = filenameTemplate;
+    document.updatedAt = Date.now();
+    await document.save();
+
+    res.status(200).json({
+      message: '文件重命名成功',
+      document,
+      newFilename
+    });
+  } catch (error) {
+    console.error('重命名失败:', error);
+    res.status(500).json({ message: '重命名失败', error: error.message });
+  }
+};
+
+// @desc    添加附件
+// @route   POST /api/documents/:id/attachments
+// @access  Private
+const addAttachment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const document = await Document.findOne({ _id: id, owner: userId });
+    if (!document) {
+      return res.status(404).json({ message: '文献不存在' });
+    }
+
+    // 从 multer 中间件获取上传的文件信息
+    if (!req.file) {
+      return res.status(400).json({ message: '请上传文件' });
+    }
+
+    const attachment = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      path: `/uploads/${req.file.filename}`,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      uploadedAt: new Date()
+    };
+
+    document.attachments.push(attachment);
+    await document.save();
+
+    res.status(201).json({
+      message: '附件上传成功',
+      attachment,
+      document
+    });
+  } catch (error) {
+    console.error('上传附件失败:', error);
+    res.status(500).json({ message: '上传附件失败' });
+  }
+};
+
+// @desc    删除附件
+// @route   DELETE /api/documents/:id/attachments/:attachmentId
+// @access  Private
+const deleteAttachment = async (req, res) => {
+  try {
+    const { id, attachmentId } = req.params;
+    const userId = req.user._id;
+
+    const document = await Document.findOne({ _id: id, owner: userId });
+    if (!document) {
+      return res.status(404).json({ message: '文献不存在' });
+    }
+
+    const attachmentIndex = document.attachments.findIndex(
+      att => att._id.toString() === attachmentId
+    );
+
+    if (attachmentIndex === -1) {
+      return res.status(404).json({ message: '附件不存在' });
+    }
+
+    // 删除物理文件
+    const fs = require('fs');
+    const path = require('path');
+    const config = require('../config');
+    const attachment = document.attachments[attachmentIndex];
+    const filePath = path.join(config.upload.path, attachment.filename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // 从数组中移除
+    document.attachments.splice(attachmentIndex, 1);
+    await document.save();
+
+    res.status(200).json({ message: '附件删除成功' });
+  } catch (error) {
+    console.error('删除附件失败:', error);
+    res.status(500).json({ message: '删除附件失败' });
+  }
+};
+
+// @desc    批量移动文档
+// @route   PATCH /api/documents/batch/move
+// @access  Private
+const batchMoveDocuments = async (req, res) => {
+  try {
+    const { documentIds, collectionId } = req.body;
+    const userId = req.user._id;
+
+    // 验证目录存在（如果指定）
+    if (collectionId) {
+      const Collection = require('../models/Collection');
+      const collection = await Collection.findOne({
+        _id: collectionId,
+        owner: userId
+      });
+      if (!collection) {
+        return res.status(400).json({ message: '目标目录不存在' });
+      }
+    }
+
+    const result = await Document.updateMany(
+      { _id: { $in: documentIds }, owner: userId },
+      { collectionId: collectionId || null, updatedAt: Date.now() }
+    );
+
+    res.status(200).json({
+      message: '批量移动成功',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('批量移动失败:', error);
+    res.status(500).json({ message: '批量移动失败' });
+  }
+};
+
 module.exports = {
   getDocuments,
   getFavorites,
@@ -230,5 +458,10 @@ module.exports = {
   updateDocument,
   deleteDocument,
   getDocumentNotes,
-  toggleFavorite
+  toggleFavorite,
+  moveDocument,
+  renameDocument,
+  addAttachment,
+  deleteAttachment,
+  batchMoveDocuments
 };
