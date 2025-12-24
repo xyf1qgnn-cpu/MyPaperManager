@@ -69,3 +69,68 @@ ${text.substring(0, 4000)} // 限制文本长度以防超出Token限制
     };
   }
 };
+
+/**
+ * 通用AI文本生成方法
+ * @param {string} prompt - 提示词
+ * @param {Object} options - 可选配置
+ * @param {string} [options.apiKey] - 可选的用户API Key
+ * @param {boolean} [options.json] - 是否强制返回JSON格式
+ * @returns {Promise<string>} - AI生成的文本
+ */
+exports.generateText = async (prompt, options = {}) => {
+  try {
+    const finalApiKey = options.apiKey || config.ai.apiKey;
+    
+    if (!finalApiKey) {
+      console.warn('No API Key provided for AI service');
+      throw new Error('未配置 API Key');
+    }
+
+    const client = new OpenAI({
+      baseURL: config.ai.baseURL,
+      apiKey: finalApiKey
+    });
+
+    const completionOptions = {
+      messages: [{ role: "user", content: prompt }],
+      model: "deepseek-chat",
+      temperature: 0.3,
+    };
+
+    // 如果需要JSON格式输出
+    if (options.json) {
+      completionOptions.response_format = { type: "json_object" };
+    }
+
+    const completion = await client.chat.completions.create(completionOptions);
+    return completion.choices[0].message.content;
+  } catch (error) {
+    console.error('AI生成失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * AI翻译功能
+ * @param {string} text - 待翻译文本
+ * @param {string} targetLang - 目标语言
+ * @param {string} [apiKey] - 可选的用户API Key
+ * @returns {Promise<string>} - 翻译结果
+ */
+exports.translate = async (text, targetLang = '中文', apiKey) => {
+  const prompt = `请将以下文本翻译成${targetLang}，保持学术性和准确性：\n\n${text}`;
+  return await exports.generateText(prompt, { apiKey });
+};
+
+/**
+ * AI摘要生成
+ * @param {string} text - 待摘要文本
+ * @param {number} maxLength - 最大字数
+ * @param {string} [apiKey] - 可选的用户API Key
+ * @returns {Promise<string>} - 摘要结果
+ */
+exports.summarize = async (text, maxLength = 300, apiKey) => {
+  const prompt = `请为以下学术文本生成一个简洁的中文摘要，不超过${maxLength}字：\n\n${text.substring(0, 6000)}`;
+  return await exports.generateText(prompt, { apiKey });
+};

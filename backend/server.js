@@ -34,6 +34,9 @@ const noteRoutes = require('./routes/noteRoutes');
 const annotationRoutes = require('./routes/annotationRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const collectionRoutes = require('./routes/collectionRoutes');
+const smartGroupRoutes = require('./routes/smartGroupRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const exportRoutes = require('./routes/exportRoutes');
 
 // 确保uploads目录存在
 const fs = require('fs');
@@ -72,6 +75,15 @@ app.use('/api/ai', aiRoutes);
 
 // 使用目录路由
 app.use('/api/collections', collectionRoutes);
+
+// 使用智能分组路由
+app.use('/api/smart-groups', smartGroupRoutes);
+
+// 使用统计分析路由
+app.use('/api/analytics', analyticsRoutes);
+
+// 使用导出路由
+app.use('/api/export', exportRoutes);
 
 // 静态文件服务 - 提供前端页面和上传的文件
 app.use('/uploads', express.static(path.resolve(config.upload.path)));

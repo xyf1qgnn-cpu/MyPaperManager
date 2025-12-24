@@ -15,6 +15,8 @@ import {
   ThunderboltOutlined,
   BookOutlined,
   FileTextOutlined,
+  RiseOutlined,
+  FolderOutlined,
 } from '@ant-design/icons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ParticleBackground } from './animations';
@@ -208,6 +210,16 @@ const MainLayout = () => {
       key: '/favorites', 
       label: '我的收藏', 
       icon: <HeartOutlined style={{ fontSize: 18 }} /> 
+    },
+    { 
+      key: '/smart-groups', 
+      label: '智能分组', 
+      icon: <ThunderboltOutlined style={{ fontSize: 18 }} /> 
+    },
+    { 
+      key: '/analytics', 
+      label: '文献统计', 
+      icon: <RiseOutlined style={{ fontSize: 18 }} /> 
     },
     { 
       key: '/graph', 

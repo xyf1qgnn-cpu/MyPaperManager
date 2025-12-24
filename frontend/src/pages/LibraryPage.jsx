@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Modal, Form, Input, message, Spin, Button, Alert, Tabs, Tooltip, Select } from 'antd';
+import { Upload, Modal, Form, Input, message, Spin, Button, Alert, Tabs, Tooltip, Select, Dropdown } from 'antd';
 import { 
   InboxOutlined, 
   CheckCircleOutlined, 
@@ -9,12 +9,16 @@ import {
   EditOutlined,
   PlusOutlined,
   UpOutlined,
+  DownloadOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parsePdfMetadata, createDocument, getDocuments, toggleFavorite, deleteDocument } from '../services/documentService';
 import { getCollections, getCollectionDocuments, moveDocument, renameDocument } from '../services/collectionService';
+import { CacheService } from '../services/cacheService';
 import DocumentList from '../components/DocumentList';
 import CollectionTree from '../components/CollectionTree';
+import ExportModal from '../components/ExportModal';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const { Dragger } = Upload;
@@ -41,6 +45,10 @@ const LibraryPage = () => {
   
   // 上传区域展开状态
   const [uploadExpanded, setUploadExpanded] = useState(false);
+  
+  // 导出模态框
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [exportMode, setExportMode] = useState('selected'); // 'selected', 'all', 'favorites'
 
   useEffect(() => {
     fetchDocuments();
@@ -57,9 +65,21 @@ const LibraryPage = () => {
         const response = await getCollectionDocuments(selectedCollection);
         data = response.data || response;
       }
-      setDocuments(Array.isArray(data) ? data : []);
+      const docList = Array.isArray(data) ? data : [];
+      setDocuments(docList);
+      
+      // 缓存文献数据用于离线访问
+      if (docList.length > 0) {
+        CacheService.cacheDocuments(docList);
+      }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
+      // 尝试从缓存加载
+      const cachedDocs = await CacheService.getCachedDocuments();
+      if (cachedDocs.length > 0) {
+        setDocuments(cachedDocs);
+        message.info('已加载离线缓存数据');
+      }
     } finally {
       setLoading(false);
     }
@@ -446,26 +466,80 @@ const LibraryPage = () => {
             minHeight: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexShrink: 0 }}>
-            <motion.div
-              animate={{ boxShadow: ['0 0 10px rgba(0, 212, 255, 0.3)', '0 0 20px rgba(0, 212, 255, 0.5)', '0 0 10px rgba(0, 212, 255, 0.3)'] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {selectedCollection === 'root' ? (
-                <FileTextOutlined style={{ fontSize: 18, color: '#0a0f1a' }} />
-              ) : (
-                <FolderOutlined style={{ fontSize: 18, color: '#0a0f1a' }} />
-              )}
-            </motion.div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {selectedCollection === 'root' ? '全部文献' : '当前目录'}
-              </h2>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-tertiary)' }}>
-                共 {documents.length} 篇文献
-              </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <motion.div
+                animate={{ boxShadow: ['0 0 10px rgba(0, 212, 255, 0.3)', '0 0 20px rgba(0, 212, 255, 0.5)', '0 0 10px rgba(0, 212, 255, 0.3)'] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #00d4ff 0%, #0099cc 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {selectedCollection === 'root' ? (
+                  <FileTextOutlined style={{ fontSize: 18, color: '#0a0f1a' }} />
+                ) : (
+                  <FolderOutlined style={{ fontSize: 18, color: '#0a0f1a' }} />
+                )}
+              </motion.div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {selectedCollection === 'root' ? '全部文献' : '当前目录'}
+                </h2>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  共 {documents.length} 篇文献
+                </p>
+              </div>
             </div>
+            
+            {/* 导出按钮 */}
+            {documents.length > 0 && (
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'current',
+                      label: '导出当前列表',
+                      icon: <ExportOutlined />,
+                      onClick: () => {
+                        setExportMode('selected');
+                        setExportModalVisible(true);
+                      }
+                    },
+                    {
+                      key: 'all',
+                      label: '导出全部文献',
+                      icon: <DownloadOutlined />,
+                      onClick: () => {
+                        setExportMode('all');
+                        setExportModalVisible(true);
+                      }
+                    },
+                    {
+                      key: 'favorites',
+                      label: '导出收藏夹',
+                      icon: <DownloadOutlined />,
+                      onClick: () => {
+                        setExportMode('favorites');
+                        setExportModalVisible(true);
+                      }
+                    }
+                  ]
+                }}
+                placement="bottomRight"
+              >
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button 
+                    icon={<DownloadOutlined />}
+                    style={{
+                      borderRadius: 8,
+                      background: 'rgba(0, 212, 255, 0.1)',
+                      borderColor: 'rgba(0, 212, 255, 0.3)',
+                      color: '#00d4ff'
+                    }}
+                  >
+                    导出引用
+                  </Button>
+                </motion.div>
+              </Dropdown>
+            )}
           </div>
           
           {/* 可滚动的文献列表区域 */}
@@ -556,6 +630,14 @@ const LibraryPage = () => {
           </div>
         )}
       </Modal>
+
+      {/* 导出模态框 */}
+      <ExportModal
+        open={exportModalVisible}
+        onCancel={() => setExportModalVisible(false)}
+        selectedIds={documents.map(d => d._id)}
+        mode={exportMode}
+      />
 
       <style>{`
         .upload-zone:hover { border-color: rgba(0, 212, 255, 0.6) !important; box-shadow: 0 0 30px rgba(0, 212, 255, 0.2); }
